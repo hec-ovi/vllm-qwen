@@ -238,10 +238,31 @@ beyond Python 3.
 |---|---|---|
 | `Qwen/Qwen3.6-27B-FP8` | ✘ hangs in init | vLLM's Triton `w8a8` autotune stalls on DeltaNet's 48+48 partitions under block-128 FP8 quant. RDNA 3.5 has no hardware FP8 anyway, so even if unstuck it would emulate at BF16 speed. Upstream fix needed. |
 | Unsloth `Qwen3.6-27B-GGUF` | ✘ rejected at load | HuggingFace `transformers` doesn't register the `qwen35` GGUF arch. Fixable with a small patch to `transformers`' GGUF arch map (we have a local hack in `.tests/`), but it's not a vLLM issue. |
+| Qwen 3.x reasoning parser (`--reasoning-parser qwen3`) | ✘ corrupts output on raw-text `<tool_call>` | Parser only detects the special `tool_call_token_id`, so when Qwen 3.6 emits `<tool_call>` as fragmented text tokens across deltas, the reasoning→content boundary fires prematurely and the rest of the thought stream leaks into the `content` field. `usage.reasoning_tokens` also reports 0. Upstream fix: [vllm#40783](https://github.com/vllm-project/vllm/pull/40783) (open at time of writing). |
+| Qwen 3.x tool-call parsers (`--tool-call-parser qwen3_coder` / `qwen3_xml`) | ✘ broken streaming, lost final `\n`, fragmented tags | Multiple streaming bugs in both parsers: tags split across deltas, content tracking drift under speculative decoding, interleaved text swallowed. Upstream fixes: [vllm#40785](https://github.com/vllm-project/vllm/pull/40785) (qwen3_coder) and [vllm#40787](https://github.com/vllm-project/vllm/pull/40787) (qwen3_xml). Both open at time of writing. |
+
+### Tool calling caveat
+
+The three parser bugs above affect **all** Qwen 3/3.5/3.6 versions — the
+report and PRs are from upstream vLLM maintainers. They matter most for
+**agentic coding loops**, where the model emits `<tool_call>` tags
+repeatedly and the parser's misclassification cascades into tool-arg
+corruption. Day-to-day chat and single-turn Q&A via `/v1/chat/completions`
+are mostly fine.
+
+Reproduced locally on the commit this repo ships (`51adca74e`): a
+/v1/responses prompt that contains the literal string `<tool_call>`
+inside the model's reasoning text causes the reasoning field to cut off
+mid-sentence and the rest of the thought stream to route into `content`.
+
+**Workarounds today:**
+1. For agentic use, prefer [`llama-qwen`](https://github.com/hec-ovi/llama-qwen) — llama.cpp has an independent tool-call extractor and handles Qwen 3.6 tool calls correctly (verified: single + parallel calls with clean structured arguments).
+2. Or pin `VLLM_COMMIT=<sha>` in the Dockerfile once the three PRs merge upstream.
+3. Or cherry-pick the patches into `scripts/patch_strix.py` as Patches 13/14/15 and rebuild.
 
 For Q8 GGUF serving on this hardware right now, use `llama.cpp` directly —
-it accepts the Unsloth `qwen35` GGUF natively and runs at ~7.4 t/s decode.
-That path is outside the scope of this repo.
+it accepts the Unsloth `qwen35` GGUF natively and runs at ~7.5 t/s decode.
+That path is covered by [`llama-qwen`](https://github.com/hec-ovi/llama-qwen).
 
 ---
 
