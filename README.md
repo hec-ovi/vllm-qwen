@@ -60,15 +60,65 @@ This is **the only supported configuration today.** Other Strix Halo
 variants (8050S / 8040S / lower RAM) will likely work but haven't been
 tested.
 
+### Host memory setup (required — one-time)
+
+Strix Halo is UMA: system RAM and GPU VRAM share the same physical pool.
+Out of the box the BIOS reserves a fixed chunk as "dedicated VRAM" and
+the Linux TTM subsystem caps how much of the rest the GPU driver may
+map as GTT. Both defaults are wrong for this workload — the 51 GiB
+model won't fit unless you widen them.
+
+**1. BIOS / UEFI:** set the dedicated GPU VRAM carve-out to its
+**minimum (2 GB / 2048 MB)**. You want the GPU to take memory from the
+shared pool on demand via GTT, not from a fixed-size pre-allocation.
+Menu name varies by vendor — look for *UMA Frame Buffer Size*,
+*UMA Buffer Size*, *iGPU Memory*, or *GPU Shared Memory*.
+
+**2. Ubuntu GRUB:** raise the TTM page limit so the kernel will
+actually let the GPU driver map ~116 GiB of GTT. Edit
+`/etc/default/grub`, set:
+
+```
+GRUB_CMDLINE_LINUX_DEFAULT="quiet splash ttm.pages_limit=30408704 amdgpu.noretry=0 amdgpu.gpu_recovery=1"
+```
+
+Then:
+
+```bash
+sudo update-grub
+sudo reboot
+```
+
+Verify after reboot:
+
+```bash
+cat /sys/class/drm/card1/device/mem_info_gtt_total
+# expect ~124554670080  (≈ 116 GiB)
+```
+
+`ttm.pages_limit=30408704` is 30,408,704 × 4 KiB pages = **116 GiB**.
+Leave 12 GiB for the OS and desktop. `amdgpu.noretry=0` +
+`amdgpu.gpu_recovery=1` are stability flags — keep them on for
+long-running inference.
+
 ---
 
 ## Quick start
 
 ```bash
 cp .env.template .env
-# edit .env: set VLLM_HOST_MODELS_DIR to your HF cache directory
+# edit .env:
+#   - VLLM_HOST_MODELS_DIR: your HF cache directory
+#   - HF_TOKEN: your HuggingFace read token (see below)
 
-# One-time: fetch the model into that cache directory
+# One-time, on huggingface.co (logged in):
+#   1. Open https://huggingface.co/Qwen/Qwen3.6-27B
+#      and click "Agree and access repository" (the model is gated).
+#   2. Mint a read token at https://huggingface.co/settings/tokens
+#      and paste it into .env as HF_TOKEN.
+
+# Fetch the model into your cache directory (uses HF_TOKEN from .env)
+export $(grep -E '^(HF_TOKEN|VLLM_HOST_MODELS_DIR)=' .env | xargs)
 hf download Qwen/Qwen3.6-27B --cache-dir "$VLLM_HOST_MODELS_DIR/hub"
 
 docker compose up -d --build
