@@ -240,6 +240,29 @@ beyond Python 3.
 
 ---
 
+## Which should I run: `vllm-qwen` or `llama-qwen`?
+
+| | `vllm-qwen` (this repo) | [`llama-qwen`](https://github.com/hec-ovi/llama-qwen) |
+|---|---|---|
+| Weights format | BF16 safetensors (official) | Q8_0 GGUF (Unsloth re-quant) |
+| Decode speed | 4.3 t/s | **~7.5 t/s** |
+| Prefill speed (8K) | ~38 t/s | 200 t/s |
+| Vision input | ✓ | ✘ (GGUF has no `mmproj`) |
+| `/v1/responses` + separated reasoning | ✓ | ✘ (not implemented in llama.cpp) |
+| Tool calling (OpenAI format) | ⚠ broken on current commit (see [vllm#40783](https://github.com/vllm-project/vllm/pull/40783) / [#40785](https://github.com/vllm-project/vllm/pull/40785) / [#40787](https://github.com/vllm-project/vllm/pull/40787)) | ✓ (via `--jinja`, verified clean) |
+| Context | 256K | 256K |
+| Memory footprint | ~105 GiB total | ~35 GiB total |
+| Boot time cold | ~4 min | **~13s** |
+| Build from source needs patches | yes (12 local patches) | no |
+| Official weights | ✓ (Qwen BF16) | ✘ (Unsloth re-quant) |
+
+**Rule of thumb:** if you need vision, reasoning separated for
+structured pipelines, or weights directly from the Qwen team → this
+repo. If you need raw speed, agentic loops, or a fast desktop sidekick
+→ `llama-qwen`.
+
+---
+
 ## Known non-working paths on this hardware
 
 | Target | Status | Root cause |
@@ -264,13 +287,14 @@ inside the model's reasoning text causes the reasoning field to cut off
 mid-sentence and the rest of the thought stream to route into `content`.
 
 **Workarounds today:**
-1. For agentic use, prefer [`llama-qwen`](https://github.com/hec-ovi/llama-qwen) — llama.cpp has an independent tool-call extractor and handles Qwen 3.6 tool calls correctly (verified: single + parallel calls with clean structured arguments).
+1. For agentic / text-only use, prefer [`llama-qwen`](https://github.com/hec-ovi/llama-qwen) — llama.cpp has an independent tool-call extractor and handles Qwen 3.6 tool calls correctly (verified: single + parallel calls with clean structured arguments). **No vision on that path**, though — the Unsloth GGUF doesn't ship the Qwen 3.6 vision tower (`mmproj`). If you need image understanding, stay on this repo and just avoid tool calling until the three PRs land.
 2. Or pin `VLLM_COMMIT=<sha>` in the Dockerfile once the three PRs merge upstream.
 3. Or cherry-pick the patches into `scripts/patch_strix.py` as Patches 13/14/15 and rebuild.
 
 For Q8 GGUF serving on this hardware right now, use `llama.cpp` directly —
 it accepts the Unsloth `qwen35` GGUF natively and runs at ~7.5 t/s decode.
-That path is covered by [`llama-qwen`](https://github.com/hec-ovi/llama-qwen).
+That path is covered by [`llama-qwen`](https://github.com/hec-ovi/llama-qwen)
+(text + tool calls only — **no vision** on that path).
 
 ---
 
