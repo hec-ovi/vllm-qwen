@@ -1,0 +1,58 @@
+services:
+  vllm:
+    image: vllm-qwen:builder
+    build: .
+    container_name: vllm-qwen
+    restart: unless-stopped
+    privileged: true
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    ports:
+      - "127.0.0.1:${VLLM_HOST_PORT:-8000}:8000"
+    volumes:
+      # Host-mounted model cache. Must contain the HuggingFace hub/ subdir
+      # with Qwen/Qwen3.6-27B snapshot fetched via `hf download` or similar.
+      - ${VLLM_HOST_MODELS_DIR}:/models:ro
+      # Persist Triton JIT cache across restarts. Without this, every
+      # `docker compose down` discards ~150 compiled kernels and the next
+      # boot re-pays ~3 min of cold-compile cost. Cache is keyed by
+      # (gpu arch, kernel shape) — safe to reuse.
+      - ${VLLM_HOST_TRITON_CACHE:-./.triton-cache}:/root/.triton/cache
+      - ${VLLM_HOST_VLLM_CACHE:-./.vllm-cache}:/root/.cache/vllm
+    ipc: host
+    shm_size: "16gb"
+    environment:
+      HF_HOME: /models
+      HF_HUB_OFFLINE: "1"
+      HIP_VISIBLE_DEVICES: "0"
+      # Disable AITER's CDNA-only FP8 kernels, a documented freeze class
+      # on gfx1151.
+      VLLM_ROCM_USE_AITER: "0"
+      # NEVER set VLLM_LOGGING_LEVEL=DEBUG. vLLM's ir/op.py formats
+      # tensor arguments as strings at every op dispatch when DEBUG is
+      # on, which makes decode 20-100x slower (millions of Python
+      # iterations per forward pass). Discovered via py-spy 2026-04-24.
+    command:
+      - vllm
+      - serve
+      - ${VLLM_MODEL_ID:-Qwen/Qwen3.6-27B}
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --served-model-name
+      - ${VLLM_SERVED_MODEL_NAME:-Qwen3.6-27B}
+      # Qwen3.x emits <think>...</think> tokens in native thinking mode.
+      # The qwen3 reasoning parser separates reasoning from visible
+      # content for /v1/responses.
+      - --reasoning-parser
+      - qwen3
+      # HIP Graph capture is a documented freeze class on gfx1151.
+      # Keep --enforce-eager ON until upstream confirms otherwise.
+      - --enforce-eager
+      - --max-num-seqs
+      - "${VLLM_MAX_NUM_SEQS:-1}"
+      # Native max context for Qwen 3.6 27B. Never degrade below this.
+      - --max-model-len
+      - "${VLLM_MAX_MODEL_LEN:-262144}"

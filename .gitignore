@@ -1,0 +1,41 @@
+# Secrets — only .env.template is committed
+.env
+.env.local
+*.key
+*.pem
+
+# Session history preserved locally but not shipped
+.tests/
+
+# Benchmark output (regenerated each run)
+test/*.json
+test/results/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+venv/
+
+# Editors / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Logs / tmp
+*.log
+*.tmp
+
+# Model weights should never be in the repo
+*.safetensors
+*.gguf
+*.bin
+models/
