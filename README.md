@@ -36,6 +36,14 @@ small patch set for Strix Halo. There is no prebuilt image path — consumer
 AMD GPUs aren't in AMD's mainstream ROCm support matrix yet, so source is
 the only clean route.
 
+> **Want ~75% faster decode and working tool calls instead?**
+> See the sibling repo [**`llama-qwen`**](https://github.com/hec-ovi/llama-qwen) —
+> same hardware, Qwen 3.6-27B Q8_0 via llama.cpp. Decode **7.5 t/s** vs
+> this repo's 4.3 t/s, tool calling verified clean (vLLM currently has
+> three open upstream parser bugs). Trade-off: no vision, no
+> `/v1/responses`. Pick that one for agentic / coding / chat speed, this
+> one for vision or structured reasoning output.
+
 ---
 
 ## Stack
