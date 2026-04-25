@@ -311,3 +311,9 @@ That path is covered by [`llama-qwen`](https://github.com/hec-ovi/llama-qwen)
 └── test/
     └── bench.py            reproducible 4-endpoint benchmark harness
 ```
+
+---
+
+## License
+
+[The Unlicense](LICENSE). Public domain dedication: use, modify, distribute, sell, fork, do whatever you want with this code. No attribution required, no warranty given.
