@@ -32,12 +32,12 @@ OpenAI-compatible HTTP API on an **AMD Ryzen AI Max+ 395 "Strix Halo"**
 endpoint. Native 256K context.
 
 vLLM is **built from source** against a TheRock nightly ROCm SDK with a
-small patch set for Strix Halo. There is no prebuilt image path — consumer
+small patch set for Strix Halo. There is no prebuilt image path, consumer
 AMD GPUs aren't in AMD's mainstream ROCm support matrix yet, so source is
 the only clean route.
 
 > **Want ~75% faster decode and working tool calls instead?**
-> See the sibling repo [**`llama-qwen`**](https://github.com/hec-ovi/llama-qwen) —
+> See the sibling repo [**`llama-qwen`**](https://github.com/hec-ovi/llama-qwen):
 > same hardware, Qwen 3.6-27B Q8_0 via llama.cpp. Decode **7.5 t/s** vs
 > this repo's 4.3 t/s, tool calling verified clean (vLLM currently has
 > three open upstream parser bugs). Trade-off: no vision, no
@@ -68,18 +68,18 @@ This is **the only supported configuration today.** Other Strix Halo
 variants (8050S / 8040S / lower RAM) will likely work but haven't been
 tested.
 
-### Host memory setup (required — one-time)
+### Host memory setup (required, one-time)
 
 Strix Halo is UMA: system RAM and GPU VRAM share the same physical pool.
 Out of the box the BIOS reserves a fixed chunk as "dedicated VRAM" and
 the Linux TTM subsystem caps how much of the rest the GPU driver may
-map as GTT. Both defaults are wrong for this workload — the 51 GiB
+map as GTT. Both defaults are wrong for this workload: the 51 GiB
 model won't fit unless you widen them.
 
 **1. BIOS / UEFI:** set the dedicated GPU VRAM carve-out to its
 **minimum (2 GB / 2048 MB)**. You want the GPU to take memory from the
 shared pool on demand via GTT, not from a fixed-size pre-allocation.
-Menu name varies by vendor — look for *UMA Frame Buffer Size*,
+Menu name varies by vendor; look for *UMA Frame Buffer Size*,
 *UMA Buffer Size*, *iGPU Memory*, or *GPU Shared Memory*.
 
 **2. Ubuntu GRUB:** raise the TTM page limit so the kernel will
@@ -106,7 +106,7 @@ cat /sys/class/drm/card1/device/mem_info_gtt_total
 
 `ttm.pages_limit=30408704` is 30,408,704 × 4 KiB pages = **116 GiB**.
 Leave 12 GiB for the OS and desktop. `amdgpu.noretry=0` +
-`amdgpu.gpu_recovery=1` are stability flags — keep them on for
+`amdgpu.gpu_recovery=1` are stability flags; keep them on for
 long-running inference.
 
 ---
@@ -132,7 +132,7 @@ hf download Qwen/Qwen3.6-27B --cache-dir "$VLLM_HOST_MODELS_DIR/hub"
 docker compose up -d --build
 
 # First build: ~15 min (ROCm tarball + torch wheels + vLLM source build)
-# First start: ~4 min (Triton kernel JIT — one-time)
+# First start: ~4 min (Triton kernel JIT, one-time)
 # Subsequent starts: <1 min (kernel cache persisted)
 
 # Verify
@@ -141,7 +141,7 @@ curl -s http://127.0.0.1:8000/v1/models | python3 -m json.tool
 
 ---
 
-## First boot takes ~4 minutes — don't cancel it
+## First boot takes ~4 minutes, don't cancel it
 
 On a **cold start** (new container or cleared Triton cache):
 
@@ -156,14 +156,14 @@ On a **cold start** (new container or cleared Triton cache):
 **The 170s "silent window" is Triton compiling.** One CPU core at 100%, GPU
 occasionally spiking, no log output for minutes at a time. It is not stuck.
 Common mistake: people see the silence, `docker compose down`, restart, and
-lose the cache they were about to finish building — then it starts over.
+lose the cache they were about to finish building, then it starts over.
 
 **Subsequent boots are < 1 min** because the Triton cache persists in
 `$VLLM_HOST_TRITON_CACHE` (repo-local `./.triton-cache/` by default).
 
 **Never set `VLLM_LOGGING_LEVEL=DEBUG`.** vLLM's `ir/op.py` formats every
 tensor argument into a string at every op dispatch when DEBUG is on, which
-makes decode **20–100× slower** (discovered via py-spy). Default `INFO` is
+makes decode **20-100× slower** (discovered via py-spy). Default `INFO` is
 fine.
 
 ---
@@ -173,7 +173,7 @@ fine.
 | Endpoint | Purpose |
 |---|---|
 | `POST /v1/chat/completions` | OpenAI chat, with `messages` array. Supports vision via `image_url` content blocks. |
-| `POST /v1/completions` | OpenAI text completion — raw `prompt` string, no chat template. |
+| `POST /v1/completions` | OpenAI text completion, raw `prompt` string, no chat template. |
 | `POST /v1/responses` | OpenAI Responses API. Reasoning is separated into `output[].type == "reasoning"`. |
 | `GET  /v1/models` | List the served model name (`Qwen3.6-27B`). |
 | `GET  /health` | Liveness probe. |
@@ -209,8 +209,8 @@ Temperature 0. **No `max_tokens` cap** (model decides when to stop).
 | p90 | 4.40 t/s |
 | Peak | 4.40 t/s |
 
-Decode is **rock-steady at 4.2–4.4 t/s** across all endpoints and prompt
-shapes. That's the real BF16 ceiling for a 27B model on gfx1151 — bound by
+Decode is **rock-steady at 4.2 to 4.4 t/s** across all endpoints and prompt
+shapes. That's the real BF16 ceiling for a 27B model on gfx1151, bound by
 weight-streaming bandwidth through the UMA, not by compute.
 
 ### Memory footprint at idle (model loaded, KV allocated)
@@ -274,7 +274,7 @@ repo. If you need raw speed, agentic loops, or a fast desktop sidekick
 
 ### Tool calling caveat
 
-The three parser bugs above affect **all** Qwen 3/3.5/3.6 versions — the
+The three parser bugs above affect **all** Qwen 3/3.5/3.6 versions, the
 report and PRs are from upstream vLLM maintainers. They matter most for
 **agentic coding loops**, where the model emits `<tool_call>` tags
 repeatedly and the parser's misclassification cascades into tool-arg
@@ -287,14 +287,14 @@ inside the model's reasoning text causes the reasoning field to cut off
 mid-sentence and the rest of the thought stream to route into `content`.
 
 **Workarounds today:**
-1. For agentic / text-only use, prefer [`llama-qwen`](https://github.com/hec-ovi/llama-qwen) — llama.cpp has an independent tool-call extractor and handles Qwen 3.6 tool calls correctly (verified: single + parallel calls with clean structured arguments). **No vision on that path**, though — the Unsloth GGUF doesn't ship the Qwen 3.6 vision tower (`mmproj`). If you need image understanding, stay on this repo and just avoid tool calling until the three PRs land.
+1. For agentic / text-only use, prefer [`llama-qwen`](https://github.com/hec-ovi/llama-qwen), llama.cpp has an independent tool-call extractor and handles Qwen 3.6 tool calls correctly (verified: single + parallel calls with clean structured arguments). **No vision on that path**, though, the Unsloth GGUF doesn't ship the Qwen 3.6 vision tower (`mmproj`). If you need image understanding, stay on this repo and just avoid tool calling until the three PRs land.
 2. Or pin `VLLM_COMMIT=<sha>` in the Dockerfile once the three PRs merge upstream.
 3. Or cherry-pick the patches into `scripts/patch_strix.py` as Patches 13/14/15 and rebuild.
 
-For Q8 GGUF serving on this hardware right now, use `llama.cpp` directly —
+For Q8 GGUF serving on this hardware right now, use `llama.cpp` directly:
 it accepts the Unsloth `qwen35` GGUF natively and runs at ~7.5 t/s decode.
 That path is covered by [`llama-qwen`](https://github.com/hec-ovi/llama-qwen)
-(text + tool calls only — **no vision** on that path).
+(text + tool calls only, **no vision** on that path).
 
 ---
 
